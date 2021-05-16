@@ -1,98 +1,113 @@
-import React, { useEffect, useState } from 'react'
-import { addUser, getUser } from './module'
+import React, { useContext, useEffect, useState } from 'react';
+import {BrowserRouter as Router, Switch, Route, Redirect} from "react-router-dom";
+import { Header } from './Header';
+import { Login } from './Login';
+import { getCurentUser } from './module';
+import { UserProducts } from './Products/usersAccess';
+import { Users } from './Users';
+
+export const WrapContext = React.createContext({
+    user:null,
+    isloggedIn:false,
+    logout:()=>{}
+})
+
+const WrapperRoute = ({render, ...restprops})=>{
+    const {isloggedIn,user}=useContext(WrapContext)
+    return(
+        <Route
+        {...restprops}
+        render={(props)=>{
+            if(isloggedIn){
+                if(user.role ===1){
+                    return <Redirect to={"/admin/users"} />
+                }else{
+                    return <Redirect to={"/user/products"} />
+                }
+            }else{
+                return render(props)
+            }
+        }}
+         />
+    )
+}
+
+const ProdutectRoute = ({component:Component, ...restprops})=>{
+    const {isloggedIn,logout,user} = useContext(WrapContext)
+    return(
+        <Route
+        {...restprops}
+        exact
+        render={(props)=>{
+            if(!isloggedIn){
+                return <Redirect to= "/login" />
+            }return(
+                <>
+                <Header logout={logout} user={user}/>
+
+                <Component {...props} user={user}/>
+                </>
+            )
+        }}
+         />
+    )
+}
 
 export const App=()=>{
+ const [user, setUser] = useState(null);
+ const [isloggedIn, setIsLoggedIn]=useState(false)
+    
+const handlelogin=(token,user)=>{
+    setUser(user);
+    setIsLoggedIn(true);
+}
 
-    const [users, setUsers] = useState([])
-    const [user,setUser]=useState({name:""})
-    const [isAddOpen,toggleAddOpen]=useState(false)
-
-    const handleUsers=()=>{
-        getUser().then((data)=>{
-            setUsers(data)
+useEffect(()=>{
+    const token = localStorage.getItem("auth_token")
+    if(token){
+        getCurentUser(token)
+        .then((data)=>{
+            setUser(data);
+            setIsLoggedIn(true);
         })
-    }
-
-    const handleAddClose=()=>{
-        setUser({name:""})
-        toggleAddOpen(!isAddOpen)
-    }
-
-    const handleCreate=()=>{
-        const {name}=user
-        addUser(name).then(()=>{
-            handleUsers();
-            handleAddClose();
+        .catch(()=>{
+            logout()
         })
+    }else{
+        logout();
     }
+})
 
-    useEffect(()=>{
-        handleUsers();
-    },[]);
+const logout = ()=>{
+    localStorage.removeItem("auth_token");
+    setUser(null);
+    setIsLoggedIn(false)
+}
+    
 
-    if(isAddOpen)
-    return(
-        <div className="container">
-            <input 
-            type="text"
-            name="name"
-            className="form-control"
-            placeholder="Enter Name"
-            value={user.name}
-            onChange={(e)=>{
-                setUser((usr)=>({...usr,name:e.target.value}))
+    return (
+        <Router>
+            <WrapContext.Provider
+            value={{
+                user,
+                isloggedIn,
+                logout
             }}
-            />
-            <button
-            type="button"
-            className="btn btn-primary"
-            onClick={handleCreate}
             >
-                Submit
-            </button>
-            <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={handleAddClose}
-            >
-                cancel
-            </button>
 
-        </div>
-    )
-
-    return(
-        <div className="container">
-            <div className="row">
-                <h1>Users List</h1>
-            </div>
-            <div className="row">
-                <button
-                type="button"
-                className="btn btn-primary"
-                onClick={()=>{
-                    toggleAddOpen(!isAddOpen)
-                }}
-                >
-                    + Add
-                </button>
-            </div>
-            <table className="table">
-                <thead>
-                    <tr>
-                        <th>#</th>
-                        <th>Name</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {users.map((user,index)=>(
-                        <tr key={index}>
-                            <td>{index+1}</td>
-                            <td>{user.name}</td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
-        </div>
+            <Switch>
+                <Route exact path="/" render={()=><Redirect to="/login"/>} />
+                <WrapperRoute exact path="/login"
+                render={(props)=><Login {...props} handlelogin={handlelogin}/>}
+                />
+                <ProdutectRoute exact path="/admin/users"
+                component={Users}
+                />
+                <ProdutectRoute exact path="/user/products"
+                component={UserProducts}
+                />
+            </Switch>
+            </WrapContext.Provider>
+        </Router>
     )
 }
